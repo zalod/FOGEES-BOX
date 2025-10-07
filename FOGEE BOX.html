@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fogees Community Box</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at top, #d25c21 20%, #000 80%);
+    }
+    .font-display {
+      font-family: 'Poppins', sans-serif;
+    }
+    .lava-glow {
+      box-shadow: 0 0 20px rgba(236, 47, 47, 0.35);
+    }
+  </style>
+</head>
+
+<body class="text-slate-100 min-h-screen p-6">
+  <!-- Main container -->
+  <div class="max-w-3xl mx-auto bg-slate-800 rounded-2xl p-6 shadow-lg lava-glow">
+
+    <!-- Logo inside the main box -->
+    <div class="flex items-center gap-2 mb-4">
+      <img src="FOGO BADGE SITE/fogo-removebg-preview.png" alt="Fogo Logo" 
+          class="w-10 h-10 rounded-full hover:scale-105 transition-transform duration-200 logo-glow">
+      <span class="text-white font-display text-xl font-bold tracking-tight"></span>
+    </div>
+
+    <h1 class="text-3xl font-bold text-white mb-4 text-center font-display">Fogees Community Box</h1>
+    <p class="text-slate-300 text-center mb-6">Drop your ideas, thoughts or hot takes <span class="text-orange-300 font-semibold">anonymously</span>.</p>
+
+    <!-- Sort Toggle -->
+    <div class="flex justify-end mb-4">
+      <div class="bg-slate-700 rounded-md px-3 py-2 text-sm text-slate-300">
+        Sort: 
+        <button id="sortHot" class="font-semibold text-orange-400 hover:text-orange-300">Hot</button> |
+        <button id="sortNew" class="font-semibold text-slate-400 hover:text-slate-200">New</button>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <form id="ideaForm" class="flex flex-col sm:flex-row gap-3 mb-6">
+      <textarea id="ideaInput" maxlength="280" placeholder="What's your idea?" class="flex-1 bg-slate-700 text-slate-100 rounded-md p-3 outline-none focus:ring-2 focus:ring-orange-400" required></textarea>
+      <button type="submit" id="submitBtn" class="px-6 py-3 bg-orange-400 text-slate-900 font-semibold rounded-md hover:bg-orange-300">Submit</button>
+    </form>
+
+    <!-- Idea feed -->
+    <div id="ideasContainer" class="space-y-4"></div>
+  </div>
+
+  <!-- Firebase + App Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+    import { getDatabase, ref, push, onValue, update } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+
+    // === Your Firebase configuration ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyBGps1_KntR93NDyKGXP-6S24K14iGAgQ8",
+      authDomain: "fogoidea.firebaseapp.com",
+      projectId: "fogoidea",
+      storageBucket: "fogoidea.firebasestorage.app",
+      messagingSenderId: "953261435159",
+      appId: "1:953261435159:web:750bd0d19021a5650eaf52",
+      measurementId: "G-S0PHBB633W",
+      databaseURL: "https://fogoidea-default-rtdb.firebaseio.com"
+    };
+    // ================================
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const ideasRef = ref(db, "ideas");
+
+    const ideaForm = document.getElementById("ideaForm");
+    const ideaInput = document.getElementById("ideaInput");
+    const ideasContainer = document.getElementById("ideasContainer");
+    const submitBtn = document.getElementById("submitBtn");
+    const sortHotBtn = document.getElementById("sortHot");
+    const sortNewBtn = document.getElementById("sortNew");
+
+    let sortMode = "hot";
+    let votedIdeas = JSON.parse(localStorage.getItem("fogo_voted")) || [];
+
+    // Load all ideas in real-time
+    onValue(ideasRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const ideas = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+      renderIdeas(ideas);
+    });
+
+    // Submit new idea
+    ideaForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = ideaInput.value.trim();
+      if (!text) return;
+
+      push(ideasRef, {
+        text,
+        timestamp: Date.now(),
+        votes: 0
+      });
+
+      ideaInput.value = "";
+      submitBtn.disabled = true;
+      submitBtn.classList.add("opacity-50", "cursor-not-allowed");
+      submitBtn.textContent = "Submitted";
+      sessionStorage.setItem("fogo_posted", "true");
+    });
+
+    // Render ideas
+    function renderIdeas(ideas) {
+      ideasContainer.innerHTML = "";
+
+      if (sortMode === "hot") {
+        ideas.sort((a, b) => {
+          const hoursA = (Date.now() - a.timestamp) / 3600000;
+          const hoursB = (Date.now() - b.timestamp) / 3600000;
+          const scoreA = a.votes - hoursA * 0.2;
+          const scoreB = b.votes - hoursB * 0.2;
+          return scoreB - scoreA;
+        });
+      } else {
+        ideas.sort((a, b) => b.timestamp - a.timestamp);
+      }
+
+      ideas.forEach((idea) => {
+        const voted = votedIdeas.includes(idea.id);
+        const card = document.createElement("div");
+        card.className = "bg-slate-700 rounded-lg p-4 border border-slate-600 hover:border-green-400 transition idea-card";
+
+        card.innerHTML = `
+          <p class="text-slate-100 mb-3">${idea.text}</p>
+          <div class="flex justify-between items-center text-sm text-slate-400">
+            <span>${timeSince(idea.timestamp)} ago</span>
+            <button class="flex items-center gap-1 font-semibold text-slate-200 hover:text-slate-100" ${voted ? "disabled" : ""}>
+              <span class="${voted ? "text-green-700" : "text-green-400"}">▲</span> 
+              <span>${idea.votes}</span>
+            </button>
+          </div>
+        `;
+
+        const upvoteBtn = card.querySelector("button");
+        upvoteBtn.addEventListener("click", () => {
+          if (votedIdeas.includes(idea.id)) return;
+          votedIdeas.push(idea.id);
+          localStorage.setItem("fogo_voted", JSON.stringify(votedIdeas));
+          const newVotes = idea.votes + 1;
+          update(ref(db, `ideas/${idea.id}`), { votes: newVotes });
+        });
+
+        ideasContainer.appendChild(card);
+      });
+    }
+
+    // Sorting toggle
+    sortHotBtn.addEventListener("click", () => {
+      sortMode = "hot";
+      sortHotBtn.classList.replace("text-slate-400", "text-orange-400");
+      sortNewBtn.classList.replace("text-orange-400", "text-slate-400");
+    });
+
+    sortNewBtn.addEventListener("click", () => {
+      sortMode = "new";
+      sortNewBtn.classList.replace("text-slate-400", "text-orange-400");
+      sortHotBtn.classList.replace("text-orange-400", "text-slate-400");
+    });
+
+    // Helper: time since
+    function timeSince(timestamp) {
+      const seconds = Math.floor((Date.now() - timestamp) / 1000);
+      const intervals = [
+        { label: "year", seconds: 31536000 },
+        { label: "month", seconds: 2592000 },
+        { label: "day", seconds: 86400 },
+        { label: "hour", seconds: 3600 },
+        { label: "minute", seconds: 60 },
+      ];
+      for (const interval of intervals) {
+        const count = Math.floor(seconds / interval.seconds);
+        if (count >= 1) return `${count} ${interval.label}${count > 1 ? "s" : ""}`;
+      }
+      return `${Math.floor(seconds)}s`;
+    }
+  </script>
+</body>
+</html>
