@@ -24,13 +24,15 @@
 
     <!-- Logo inside the main box -->
     <div class="flex items-center gap-2 mb-4">
-      <img src="fogo-logo.png" alt="Fogo Logo" 
-          class="w-10 h-10 rounded-full hover:scale-105 transition-transform duration-200 logo-glow">
+      <img src="FOGO BADGE SITE/fogo-removebg-preview.png" alt="Fogo Logo" 
+           class="w-10 h-10 rounded-full hover:scale-105 transition-transform duration-200 logo-glow">
       <span class="text-white font-display text-xl font-bold tracking-tight"></span>
     </div>
 
     <h1 class="text-3xl font-bold text-white mb-4 text-center font-display">Fogees Community Box</h1>
-    <p class="text-slate-300 text-center mb-6">Drop your ideas, thoughts or hot takes <span class="text-orange-300 font-semibold">anonymously</span>.</p>
+    <p class="text-slate-300 text-center mb-6">
+      Drop your ideas, thoughts or hot takes <span class="text-orange-300 font-semibold">anonymously</span>.
+    </p>
 
     <!-- Sort Toggle -->
     <div class="flex justify-end mb-4">
@@ -43,8 +45,10 @@
 
     <!-- Form -->
     <form id="ideaForm" class="flex flex-col sm:flex-row gap-3 mb-6">
-      <textarea id="ideaInput" maxlength="280" placeholder="What's your idea?" class="flex-1 bg-slate-700 text-slate-100 rounded-md p-3 outline-none focus:ring-2 focus:ring-orange-400" required></textarea>
-      <button type="submit" id="submitBtn" class="px-6 py-3 bg-orange-400 text-slate-900 font-semibold rounded-md hover:bg-orange-300">Submit</button>
+      <textarea id="ideaInput" maxlength="280" placeholder="What's your idea?" 
+        class="flex-1 bg-slate-700 text-slate-100 rounded-md p-3 outline-none focus:ring-2 focus:ring-orange-400" required></textarea>
+      <button type="submit" id="submitBtn" 
+        class="px-6 py-3 bg-orange-400 text-slate-900 font-semibold rounded-md hover:bg-orange-300">Submit</button>
     </form>
 
     <!-- Idea feed -->
@@ -56,7 +60,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
     import { getDatabase, ref, push, onValue, update } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 
-    // === Your Firebase configuration ===
+    // === Firebase Config ===
     const firebaseConfig = {
       apiKey: "AIzaSyBGps1_KntR93NDyKGXP-6S24K14iGAgQ8",
       authDomain: "fogoidea.firebaseapp.com",
@@ -69,7 +73,6 @@
     };
     // ================================
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const ideasRef = ref(db, "ideas");
@@ -82,7 +85,7 @@
     const sortNewBtn = document.getElementById("sortNew");
 
     let sortMode = "hot";
-    let votedIdeas = JSON.parse(localStorage.getItem("fogo_voted")) || [];
+    let votedIdeas = JSON.parse(localStorage.getItem("fogo_voted")) || {};
 
     // Load all ideas in real-time
     onValue(ideasRef, (snapshot) => {
@@ -97,11 +100,7 @@
       const text = ideaInput.value.trim();
       if (!text) return;
 
-      push(ideasRef, {
-        text,
-        timestamp: Date.now(),
-        votes: 0
-      });
+      push(ideasRef, { text, timestamp: Date.now(), votes: 0, downvotes: 0 });
 
       ideaInput.value = "";
       submitBtn.disabled = true;
@@ -115,41 +114,104 @@
       ideasContainer.innerHTML = "";
 
       if (sortMode === "hot") {
+        // Hot sorting (by score)
         ideas.sort((a, b) => {
           const hoursA = (Date.now() - a.timestamp) / 3600000;
           const hoursB = (Date.now() - b.timestamp) / 3600000;
-          const scoreA = a.votes - hoursA * 0.2;
-          const scoreB = b.votes - hoursB * 0.2;
+          const netA = (a.upvotes ?? a.votes ?? 0) - (a.downvotes || 0);
+          const netB = (b.upvotes || 0) - (b.downvotes || 0);
+          const scoreA = netA - hoursA * 0.2;
+          const scoreB = netB - hoursB * 0.2;
+
           return scoreB - scoreA;
         });
       } else {
+        // New sorting (purely chronological)
         ideas.sort((a, b) => b.timestamp - a.timestamp);
       }
 
       ideas.forEach((idea) => {
-        const voted = votedIdeas.includes(idea.id);
+        const voteState = votedIdeas[idea.id] || null; // "up" | "down" | null
         const card = document.createElement("div");
-        card.className = "bg-slate-700 rounded-lg p-4 border border-slate-600 hover:border-green-400 transition idea-card";
-
-        card.innerHTML = `
+        card.className =
+          "bg-slate-700 rounded-lg p-4 border border-slate-600 hover:border-green-400 transition idea-card";
+          card.innerHTML = `
           <p class="text-slate-100 mb-3">${idea.text}</p>
           <div class="flex justify-between items-center text-sm text-slate-400">
             <span>${timeSince(idea.timestamp)} ago</span>
-            <button class="flex items-center gap-1 font-semibold text-slate-200 hover:text-slate-100" ${voted ? "disabled" : ""}>
-              <span class="${voted ? "text-green-700" : "text-green-400"}">▲</span> 
-              <span>${idea.votes}</span>
-            </button>
+            <div class="flex items-center gap-4">
+              <button class="upvote flex items-center gap-1 font-semibold text-slate-200 hover:text-slate-100">
+                <span class="${voteState === "up" ? "text-green-600" : "text-green-400"}">▲</span>
+                <span class="up-count">${idea.upvotes ?? idea.votes ?? 0}</span>
+              </button>
+              <button class="downvote flex items-center gap-1 font-semibold text-slate-200 hover:text-slate-100">
+                <span class="${voteState === "down" ? "text-red-600" : "text-red-400"}">▼</span>
+                <span class="down-count">${idea.downvotes ?? 0}</span>
+              </button>
+            </div>
           </div>
         `;
 
-        const upvoteBtn = card.querySelector("button");
+
+
+        const upvoteBtn = card.querySelector(".upvote");
+        const downvoteBtn = card.querySelector(".downvote");
+
+        // Upvote
         upvoteBtn.addEventListener("click", () => {
-          if (votedIdeas.includes(idea.id)) return;
-          votedIdeas.push(idea.id);
+          const updates = {};
+          let newUpvotes = idea.upvotes || 0;
+          let newDownvotes = idea.downvotes || 0;
+
+          if (voteState === "up") {
+            // remove upvote
+            delete votedIdeas[idea.id];
+            newUpvotes -= 1;
+          } else if (voteState === "down") {
+            // switch from downvote to upvote
+            votedIdeas[idea.id] = "up";
+            newDownvotes -= 1;
+            newUpvotes += 1;
+          } else {
+            // first-time upvote
+            votedIdeas[idea.id] = "up";
+            newUpvotes += 1;
+          }
+
+          updates[`ideas/${idea.id}/upvotes`] = newUpvotes;
+          updates[`ideas/${idea.id}/downvotes`] = newDownvotes;
+          update(ref(db), updates);
           localStorage.setItem("fogo_voted", JSON.stringify(votedIdeas));
-          const newVotes = idea.votes + 1;
-          update(ref(db, `ideas/${idea.id}`), { votes: newVotes });
         });
+
+        // Downvote
+        downvoteBtn.addEventListener("click", () => {
+          const updates = {};
+          let newUpvotes = idea.upvotes || 0;
+          let newDownvotes = idea.downvotes || 0;
+
+          if (voteState === "down") {
+            // remove downvote
+            delete votedIdeas[idea.id];
+            newDownvotes -= 1;
+          } else if (voteState === "up") {
+            // switch from upvote to downvote
+            votedIdeas[idea.id] = "down";
+            newUpvotes -= 1;
+            newDownvotes += 1;
+          } else {
+            // first-time downvote
+            votedIdeas[idea.id] = "down";
+            newDownvotes += 1;
+          }
+
+          updates[`ideas/${idea.id}/upvotes`] = newUpvotes;
+          updates[`ideas/${idea.id}/downvotes`] = newDownvotes;
+          update(ref(db), updates);
+          localStorage.setItem("fogo_voted", JSON.stringify(votedIdeas));
+        });
+
+
 
         ideasContainer.appendChild(card);
       });
